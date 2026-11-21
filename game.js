@@ -199,6 +199,9 @@ function draw() {
     for (let c = 0; c < COLS; c++)
       drawBlock(ctx, c, r, board[r][c], BLOCK);
 
+  // En game over la pieza actual colisiona (nunca se colocó): no dibujarla
+  if (gameOver) return;
+
   // ghost
   const gy = ghostY();
   for (let r = 0; r < current.shape.length; r++)
@@ -226,6 +229,7 @@ function drawNext() {
 function endGame() {
   gameOver = true;
   cancelAnimationFrame(animId);
+  draw(); // estado final real (por teclado el loop no redibuja)
   overlayTitle.textContent = 'GAME OVER';
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
   overlay.classList.remove('hidden');
@@ -246,6 +250,7 @@ function togglePause() {
 }
 
 function loop(ts) {
+  if (gameOver || paused) return;
   const dt = ts - lastTime;
   lastTime = ts;
   dropAccum += dt;
@@ -257,6 +262,9 @@ function loop(ts) {
       lockPiece();
     }
   }
+  // endGame() puede haberse llamado durante este frame (vía lockPiece→spawn):
+  // cancelAnimationFrame no cancela el frame en curso, así que no reprogramar.
+  if (gameOver) return;
   draw();
   animId = requestAnimationFrame(loop);
 }
