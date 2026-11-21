@@ -18,6 +18,12 @@ const COLORS = [
   '#4db6ac', // Y - teal
   '#fff176', // single - gold
   '#9e9e9e', // hollow 3x3 - gray
+  '#ff5252', // bomba
+  '#ffee58', // rayo
+  '#e040fb', // tinte
+  '#7e57c2', // gravedad
+  '#b3e5fc', // congelar
+  '#ffffff', // comodín (solo en tablero)
 ];
 
 const PIECES = [
@@ -34,6 +40,8 @@ const PIECES = [
   [[0,0,0,0],[10,10,10,10],[0,10,0,0],[0,0,0,0]], // Y (pentominó)
   [[11]],                                      // single 1x1 (recompensa)
   [[12,12,12],[12,0,12],[12,12,12]],          // hueca 3x3 (reto)
+  [[13]], [[14]], [[15]], [[16]], [[17]],     // power-ups 1x1
+  [[18]],                                      // comodín
 ];
 
 const STANDARD_COUNT = 7;
@@ -42,6 +50,20 @@ const SINGLE = 11;
 const HOLLOW = 12;
 const PENTO_CHANCE = 0.08;
 const HOLLOW_CHANCE = 0.03;
+
+const BOMB = 13;
+const RAY = 14;
+const TINT = 15;
+const GRAVITY = 16;
+const FREEZE = 17;
+const WILDCARD = 18;
+const POWERUPS = [BOMB, RAY, TINT, GRAVITY, FREEZE];
+const POWER_ICONS = { 13: '💣', 14: '⚡', 15: '🎨', 16: '⬇️', 17: '❄️', 18: '★' };
+const POWER_NAMES = { 13: '💣 BOMBA', 14: '⚡ RAYO', 15: '🎨 TINTE', 16: '⬇️ GRAVEDAD', 17: '❄️ CONGELAR' };
+const POWERUP_EVERY = 5;
+const FREEZE_MS = 5000;
+const WILDCARD_BONUS = 50;
+const MSG_MS = 1200;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
@@ -62,7 +84,7 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let highlightColor = 'rgba(255,255,255,0.12)';
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, powerupPending, freezeMs, effectMsg, effectMsgMs;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -125,8 +147,10 @@ function merge() {
 
 function clearLines() {
   let cleared = 0;
+  let wildcards = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
     if (board[r].every(v => v !== 0)) {
+      wildcards += board[r].filter(v => v === WILDCARD).length;
       board.splice(r, 1);
       board.unshift(new Array(COLS).fill(0));
       cleared++;
@@ -135,8 +159,15 @@ function clearLines() {
   }
   if (cleared) {
     if (cleared === 4) rewardPending = true;
+    if (Math.floor((lines + cleared) / POWERUP_EVERY) > Math.floor(lines / POWERUP_EVERY)) powerupPending = true;
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
+    if (wildcards) {
+      score += wildcards * WILDCARD_BONUS * level;
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          if (board[r][c] === WILDCARD) board[r][c] = 0;
+    }
     level = Math.floor(lines / 10) + 1;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
     updateHUD();
@@ -166,8 +197,70 @@ function softDrop() {
   }
 }
 
+function showMsg(text) {
+  effectMsg = text;
+  effectMsgMs = MSG_MS;
+}
+
+function bomb(x, y) {
+  for (let r = y - 1; r <= y + 1; r++)
+    for (let c = x - 1; c <= x + 1; c++)
+      if (r >= 0 && r < ROWS && c >= 0 && c < COLS) board[r][c] = 0;
+}
+
+function ray(x, y) {
+  for (let r = 0; r < ROWS; r++) board[r][x] = 0;
+  board.splice(y, 1);
+  board.unshift(new Array(COLS).fill(0));
+}
+
+function tint(x, y) {
+  let target = y + 1 < ROWS ? board[y + 1][x] : 0;
+  if (!target || target >= WILDCARD) {
+    const counts = {};
+    let best = 0;
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) {
+        const v = board[r][c];
+        if (!v || v === WILDCARD) continue;
+        counts[v] = (counts[v] || 0) + 1;
+        if (!best || counts[v] > counts[best]) best = v;
+      }
+    target = best;
+  }
+  if (!target) return;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c] === target) board[r][c] = WILDCARD;
+}
+
+function compactGravity() {
+  for (let c = 0; c < COLS; c++) {
+    let write = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (board[r][c]) {
+        const v = board[r][c];
+        board[r][c] = 0;
+        board[write][c] = v;
+        write--;
+      }
+    }
+  }
+}
+
+function applyPowerUp(piece) {
+  const { x, y, type } = piece;
+  showMsg(POWER_NAMES[type]);
+  if (type === BOMB) bomb(x, y);
+  else if (type === RAY) ray(x, y);
+  else if (type === TINT) tint(x, y);
+  else if (type === GRAVITY) compactGravity();
+  // FREEZE se activa en spawn(); no deja bloque
+}
+
 function lockPiece() {
-  merge();
+  if (POWERUPS.includes(current.type)) applyPowerUp(current);
+  else merge();
   clearLines();
   spawn();
 }
@@ -178,7 +271,16 @@ function spawn() {
     rewardPending = false;
   } else {
     current = next;
-    next = randomPiece();
+    if (powerupPending) {
+      next = makePiece(POWERUPS[Math.floor(Math.random() * POWERUPS.length)]);
+      powerupPending = false;
+    } else {
+      next = randomPiece();
+    }
+  }
+  if (current.type === FREEZE) {
+    freezeMs = FREEZE_MS;
+    showMsg(POWER_NAMES[FREEZE]);
   }
   if (collide(current.shape, current.x, current.y)) {
     endGame();
@@ -201,6 +303,15 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   // highlight
   context.fillStyle = highlightColor;
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  const icon = POWER_ICONS[colorIndex];
+  if (icon) {
+    context.globalAlpha = alpha ?? 1;
+    context.font = `${Math.floor(size * 0.6)}px sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillStyle = colorIndex === WILDCARD ? '#555' : '#000';
+    context.fillText(icon, x * size + size / 2, y * size + size / 2 + 1);
+  }
   context.globalAlpha = 1;
 }
 
@@ -244,6 +355,30 @@ function draw() {
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
       drawBlock(ctx, current.x + c, current.y + r, current.shape[r][c], BLOCK);
+
+  drawOverlayFx();
+}
+
+function drawOverlayFx() {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (freezeMs > 0) {
+    ctx.fillStyle = 'rgba(100,181,246,0.18)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#e1f5fe';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`❄️ ${(freezeMs / 1000).toFixed(1)}s`, canvas.width / 2, 24);
+  }
+  if (effectMsgMs > 0) {
+    ctx.globalAlpha = Math.min(1, effectMsgMs / 400);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.font = 'bold 28px sans-serif';
+    ctx.strokeText(effectMsg, canvas.width / 2, canvas.height / 2);
+    ctx.fillText(effectMsg, canvas.width / 2, canvas.height / 2);
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawNext() {
@@ -284,7 +419,9 @@ function loop(ts) {
   if (gameOver || paused) return;
   const dt = ts - lastTime;
   lastTime = ts;
-  dropAccum += dt;
+  if (effectMsgMs > 0) effectMsgMs -= dt;
+  if (freezeMs > 0) freezeMs = Math.max(0, freezeMs - dt);
+  else dropAccum += dt;
   if (dropAccum >= dropInterval) {
     dropAccum = 0;
     if (!collide(current.shape, current.x, current.y + 1)) {
@@ -308,6 +445,10 @@ function init() {
   paused = false;
   gameOver = false;
   rewardPending = false;
+  powerupPending = false;
+  freezeMs = 0;
+  effectMsg = '';
+  effectMsgMs = 0;
   dropInterval = 1000;
   dropAccum = 0;
   lastTime = performance.now();
