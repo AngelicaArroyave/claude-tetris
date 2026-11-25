@@ -84,6 +84,7 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let highlightColor = 'rgba(255,255,255,0.12)';
 
+let startLevel = 1;
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, powerupPending, freezeMs, effectMsg, effectMsgMs;
 
 function createBoard() {
@@ -168,8 +169,8 @@ function clearLines() {
         for (let c = 0; c < COLS; c++)
           if (board[r][c] === WILDCARD) board[r][c] = 0;
     }
-    level = Math.floor(lines / 10) + 1;
-    dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+    level = Math.max(startLevel, Math.floor(lines / 10) + 1);
+    dropInterval = intervalForLevel(level);
     updateHUD();
   }
 }
@@ -405,13 +406,12 @@ function togglePause() {
   if (gameOver) return;
   paused = !paused;
   if (!paused) {
+    closePauseMenu();
     lastTime = performance.now();
     loop(lastTime);
   } else {
     cancelAnimationFrame(animId);
-    overlayTitle.textContent = 'PAUSA';
-    overlayScore.textContent = '';
-    overlay.classList.remove('hidden');
+    openPauseMenu();
   }
 }
 
@@ -441,7 +441,7 @@ function init() {
   board = createBoard();
   score = 0;
   lines = 0;
-  level = 1;
+  level = startLevel;
   paused = false;
   gameOver = false;
   rewardPending = false;
@@ -449,20 +449,26 @@ function init() {
   freezeMs = 0;
   effectMsg = '';
   effectMsgMs = 0;
-  dropInterval = 1000;
+  dropInterval = intervalForLevel(level);
   dropAccum = 0;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
   updateHUD();
   overlay.classList.add('hidden');
+  closePauseMenu();
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
 }
 
 document.addEventListener('keydown', e => {
-  if (e.code === 'KeyP') { togglePause(); return; }
-  if (paused || gameOver) return;
+  if (e.code === 'KeyP' || e.code === 'Escape') {
+    if (e.target === startLevelSelect && e.code === 'Escape') return; // Esc cierra el desplegable del select
+    e.preventDefault();
+    if (!e.repeat) togglePause();
+    return;
+  }
+  if (paused || gameOver) return; // con el menú abierto, Tab/Enter/flechas/Espacio quedan para el menú
   switch (e.code) {
     case 'ArrowLeft':
       if (!collide(current.shape, current.x - 1, current.y)) current.x--;
@@ -486,6 +492,50 @@ document.addEventListener('keydown', e => {
 });
 
 restartBtn.addEventListener('click', init);
+
+// ---- Menú de pausa ----
+const START_LEVEL_KEY = 'tetris-start-level';
+const pauseMenu = document.getElementById('pause-menu');
+const resumeBtn = document.getElementById('pause-resume');
+const pauseRestartBtn = document.getElementById('pause-restart');
+const controlsBtn = document.getElementById('pause-controls-btn');
+const pauseControls = document.getElementById('pause-controls');
+const startLevelSelect = document.getElementById('start-level');
+
+function intervalForLevel(lv) {
+  return Math.max(100, 1000 - (lv - 1) * 90);
+}
+
+function openPauseMenu() {
+  pauseControls.classList.add('hidden');
+  controlsBtn.setAttribute('aria-expanded', 'false');
+  startLevelSelect.value = String(startLevel);
+  pauseMenu.classList.remove('hidden');
+  resumeBtn.focus();
+}
+
+function closePauseMenu() {
+  pauseMenu.classList.add('hidden');
+  // Soltar foco para que Espacio no dispare clics en botones/select
+  if (pauseMenu.contains(document.activeElement)) document.activeElement.blur();
+}
+
+resumeBtn.addEventListener('click', () => { if (paused) togglePause(); });
+pauseRestartBtn.addEventListener('click', init);
+controlsBtn.addEventListener('click', () => {
+  const show = pauseControls.classList.toggle('hidden') === false;
+  controlsBtn.setAttribute('aria-expanded', String(show));
+});
+startLevelSelect.addEventListener('change', () => {
+  startLevel = Math.min(10, Math.max(1, parseInt(startLevelSelect.value, 10) || 1));
+  try { localStorage.setItem(START_LEVEL_KEY, String(startLevel)); } catch (e) { /* ignorar */ }
+});
+
+try {
+  const saved = parseInt(localStorage.getItem(START_LEVEL_KEY), 10);
+  if (saved >= 1 && saved <= 10) startLevel = saved;
+} catch (e) { /* ignorar */ }
+startLevelSelect.value = String(startLevel);
 
 function setTheme(theme) {
   const isLight = theme === 'light';
