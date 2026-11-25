@@ -231,3 +231,144 @@ kbd {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ---- Records ---- */
+.start-screen {
+  background: var(--bg);
+  z-index: 2;
+}
+
+.start-title {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 0.4em;
+  padding-left: 0.4em;
+  color: var(--accent);
+  text-shadow: 0 0 20px var(--accent-glow);
+}
+
+.records-heading {
+  margin-top: 8px;
+  font-size: 11px;
+  letter-spacing: 3px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.records-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.records-panel.hidden,
+.record-banner.hidden,
+.record-entry.hidden {
+  display: none;
+}
+
+.record-banner {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent-glow);
+}
+
+.record-entry {
+  display: flex;
+  gap: 6px;
+}
+
+#record-name {
+  width: 140px;
+  padding: 6px 8px;
+  background: var(--kbd-bg);
+  color: var(--text);
+  border: 1px solid var(--kbd-border);
+  border-radius: 6px;
+  font-size: 13px;
+  user-select: text;
+}
+
+#record-name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.records-table {
+  border-collapse: collapse;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 240px;
+}
+
+.records-table th {
+  font-family: system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 1px;
+  font-weight: 600;
+  color: var(--label);
+  text-align: right;
+  padding: 2px 6px;
+}
+
+.records-table td {
+  padding: 3px 6px;
+  text-align: right;
+}
+
+.records-table th:nth-child(2),
+.records-table td:nth-child(2) {
+  text-align: left;
+}
+
+.records-table tr.empty td {
+  color: var(--muted);
+  text-align: center;
+}
+
+.records-table tr.highlight td {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.records-stats {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#record-save,
+#play-btn,
+#reset-records-btn {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#play-btn {
+  padding: 10px 28px;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+#record-save:hover,
+#play-btn:hover {
+  background: var(--accent-hover);
+}
+
+#reset-records-btn {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  font-size: 11px;
+  font-weight: 600;
+}
